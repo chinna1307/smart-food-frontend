@@ -1,152 +1,166 @@
-import { useLocation, useNavigate } from "react-router-dom"
-import { useState } from "react"
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Receivers() {
-  const { state } = useLocation()
-  const navigate = useNavigate()
+  const [requests, setRequests] = useState([]);
+  const [assignedRequests, setAssignedRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  const [selected, setSelected] = useState(null)
-  const [done, setDone] = useState(false)
+  // Fetch initial data from your backend at http://localhost:5000
+  useEffect(() => {
+    fetch("http://localhost:5000/api/request")
+      .then((res) => res.json())
+      .then((data) => {
+        setRequests(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Fetch error:", err);
+        setLoading(false);
+      });
+  }, []);
 
-  if (!state) {
-    return (
-      <div style={page}>
-        <h2>No donation data found.</h2>
-        <button style={btn} onClick={() => navigate("/donate")}>Go Back</button>
-      </div>
-    )
-  }
+  const handleAssign = async (id) => {
+    try {
+      const response = await fetch("http://localhost:5000/api/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: id }),
+      });
 
-  const receivers = [
-    { id: 1, name: "Orphanage Home", email: "orphanage@mail.com", people: 25 },
-    { id: 2, name: "Old Age Shelter", email: "oldage@mail.com", people: 40 },
-    { id: 3, name: "Street Children Group", email: "street@mail.com", people: 30 }
-  ]
+      if (response.ok) {
+        // Find the item to move it to the "Active" list
+        const matchedItem = requests.find((r) => (r.id === id || r._id === id));
 
-  function confirmAssign() {
-    console.log("📧 Email sent to:", selected.email)
-    setDone(true)
-  }
+        // Update UI: Remove from pending, add to assigned
+        setRequests((prev) => prev.filter((r) => r.id !== id && r._id !== id));
+        setAssignedRequests((prev) => [
+          ...prev,
+          { ...matchedItem, status: "Driver Assigned" },
+        ]);
+      }
+    } catch (err) {
+      alert("Backend connection failed.");
+    }
+  };
+
+  if (loading) return <div style={page}>Loading...</div>;
 
   return (
     <div style={page}>
       <div style={card}>
+        <h2 style={title}>Food Donation Panel</h2>
 
-        {!done ? (
+        {/* --- SECTION 1: NEW REQUESTS --- */}
+        <h3 style={sectionHeader}>New Requests</h3>
+        {requests.length === 0 && assignedRequests.length === 0 && (
+          <p style={emptyText}>No requests yet.</p>
+        )}
+        
+        {requests.map((r) => (
+          <div key={r.id || r._id} style={row}>
+            <div style={info}>
+              <span style={nameText}>{r.name}</span>
+              <span style={subText}>{r.food} • {r.people} members</span>
+            </div>
+            <button style={btnAssign} onClick={() => handleAssign(r.id || r._id)}>
+              Assign
+            </button>
+          </div>
+        ))}
+
+        {/* --- SECTION 2: LIVE TRACKING --- */}
+        {assignedRequests.length > 0 && (
           <>
-            <h2>Donation Details</h2>
-            <p><b>From:</b> {state.name}</p>
-            <p><b>Item:</b> {state.item}</p>
-            <p><b>Quantity:</b> {state.qty}</p>
-            <p><b>Address:</b> {state.address}</p>
-
-            <h3 style={{ marginTop: 20 }}>Select Receiver</h3>
-
-            {receivers.map(r => (
-              <div key={r.id} style={row}>
-                <span>{r.name} ({r.people} people)</span>
-                <button style={btnSmall} onClick={() => setSelected(r)}>
-                  Assign
+            <h3 style={{ ...sectionHeader, marginTop: "30px" }}>Active Deliveries</h3>
+            {assignedRequests.map((r) => (
+              <div key={r.id || r._id} style={row}>
+                <div style={info}>
+                  <span style={nameText}>{r.name}</span>
+                  <span style={{ ...subText, color: "#22c55e" }}>Status: {r.status}</span>
+                </div>
+                <button 
+                  style={btnTrack} 
+                  onClick={() => navigate("/track", { state: { receiver: r } })}
+                >
+                  Track Live
                 </button>
               </div>
             ))}
-
-            {selected && (
-              <div style={confirmBox}>
-                <p><b>Assign to:</b> {selected.name}</p>
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button style={btnGreen} onClick={confirmAssign}>
-                    Confirm
-                  </button>
-                  <button style={btnRed} onClick={() => setSelected(null)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <h2 style={{ color: "#22c55e" }}>✅ Successfully Completed</h2>
-            <p>Food assigned & receiver alerted by email.</p>
-
-            <button style={btn} onClick={() => navigate("/")}>
-              Go Home
-            </button>
           </>
         )}
       </div>
     </div>
-  )
+  );
 }
 
-/* ---------- styles ---------- */
-
+// --- CSS-IN-JS STYLES ---
 const page = {
   minHeight: "100vh",
-  background: "linear-gradient(to right,#0f172a,#020617)",
+  background: "linear-gradient(to bottom right, #0f172a, #020617)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  color: "white"
-}
+  color: "white",
+  fontFamily: "'Inter', sans-serif",
+  padding: "20px"
+};
 
 const card = {
-  background: "#020617",
-  padding: "30px",
-  borderRadius: "10px",
-  width: "420px",
-  boxShadow: "0 0 20px rgba(0,0,0,.7)"
-}
+  background: "#1e293b",
+  padding: "32px",
+  borderRadius: "16px",
+  width: "100%",
+  maxWidth: "480px",
+  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)"
+};
+
+const title = { textAlign: "center", marginBottom: "24px", fontSize: "1.5rem" };
+
+const sectionHeader = {
+  fontSize: "0.9rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#94a3b8",
+  borderBottom: "1px solid #334155",
+  paddingBottom: "8px",
+  marginBottom: "12px"
+};
 
 const row = {
   display: "flex",
   justifyContent: "space-between",
-  marginTop: "10px"
-}
+  alignItems: "center",
+  background: "#0f172a",
+  padding: "16px",
+  borderRadius: "12px",
+  marginBottom: "12px",
+  border: "1px solid #334155"
+};
 
-const confirmBox = {
-  marginTop: "20px",
-  padding: "15px",
-  background: "#1e293b",
-  borderRadius: "8px"
-}
+const info = { display: "flex", flexDirection: "column", gap: "4px" };
+const nameText = { fontWeight: "600", fontSize: "1rem" };
+const subText = { fontSize: "0.85rem", color: "#94a3b8" };
+const emptyText = { textAlign: "center", color: "#64748b", padding: "20px" };
 
-const btn = {
-  padding: "10px",
-  background: "#2563eb",
-  border: "none",
-  borderRadius: "6px",
-  color: "white",
-  cursor: "pointer",
-  marginTop: "20px"
-}
-
-const btnSmall = {
+const btnAssign = {
   background: "#22c55e",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "5px",
-  cursor: "pointer"
-}
-
-const btnGreen = {
-  background: "#22c55e",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "6px",
-  cursor: "pointer",
-  color: "black",
-  fontWeight: "bold"
-}
-
-const btnRed = {
-  background: "#ef4444",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "6px",
-  cursor: "pointer",
   color: "white",
-  fontWeight: "bold"
-}
+  border: "none",
+  padding: "8px 16px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: "600",
+  transition: "0.2s"
+};
+
+const btnTrack = {
+  background: "#3b82f6",
+  color: "white",
+  border: "none",
+  padding: "8px 16px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: "600"
+};
